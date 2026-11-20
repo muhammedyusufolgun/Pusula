@@ -23,7 +23,7 @@ public class MainActivity extends Activity implements SensorEventListener, Locat
     Dial dial;
     TextView status, coords, destination;
     Location current, goal;
-    boolean active, ready, inaccurate;
+    boolean active, ready, inaccurate, offeredSettings;
     final Locale tr=new Locale("tr","TR");
     int dp(int n){ return Math.round(n*getResources().getDisplayMetrics().density); }
     TextView line(String s,int size,int color){
@@ -71,6 +71,8 @@ public class MainActivity extends Activity implements SensorEventListener, Locat
     }
     void editGoal(){
         LinearLayout box=new LinearLayout(this); box.setOrientation(1); box.setPadding(dp(22),dp(6),dp(22),0);
+        TextView guide=line("Gideceğiniz yerin koordinatlarını girin. Örnek: enlem 39.9208, boylam 32.8541. Yeşil nokta hedefin yönünü gösterir.",14,0xffcccccc);
+        guide.setGravity(Gravity.START); box.addView(guide);
         EditText name=input(box,"Hedef adı",false), lat=input(box,"Enlem (−90 … 90)",true), lon=input(box,"Boylam (−180 … 180)",true);
         if(goal!=null){name.setText(getPreferences(0).getString("name","Hedef"));
             lat.setText(""+goal.getLatitude()); lon.setText(""+goal.getLongitude());}
@@ -106,7 +108,26 @@ public class MainActivity extends Activity implements SensorEventListener, Locat
     String[] providers(){return new String[]{LocationManager.GPS_PROVIDER,LocationManager.NETWORK_PROVIDER};}
     boolean hasProvider(){for(String p:providers())if(locations.isProviderEnabled(p))return true;return false;}
     void listenLocation(){
-        if(!active || !permitted())return;
+        if(!active)return;
+        if(!permitted()){
+            current=null; updateInfo(); return;
+        }
+        if(!hasProvider()){
+            current=null; updateInfo();
+            if(!offeredSettings){
+                offeredSettings=true;
+                android.content.Intent settings=new android.content.Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+                new AlertDialog.Builder(this).setTitle("Telefonun konumu kapalı")
+                    .setMessage("Koordinatları ve hedef mesafesini görmek için telefonun konumunu açın.")
+                    .setNegativeButton("Şimdi değil",null)
+                    .setPositiveButton("Ayarlara git",(dialog,which)->{
+                        try{startActivity(settings);}catch(android.content.ActivityNotFoundException ignored){
+                            Toast.makeText(this,"Telefon ayarlarından konumu açabilirsiniz.",Toast.LENGTH_LONG).show();
+                        }
+                    }).show();
+            }
+            return;
+        }
         locations.removeUpdates(this);
         for(String p:providers())if(locations.isProviderEnabled(p)){
             try{locations.requestLocationUpdates(p,2000,2,this);}catch(SecurityException ignored){}
