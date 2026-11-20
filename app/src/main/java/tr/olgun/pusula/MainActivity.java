@@ -79,9 +79,16 @@ public class MainActivity extends Activity implements SensorEventListener, Locat
     }
     void receiveMap(Intent intent){
         if(!Intent.ACTION_SEND.equals(intent.getAction()))return;
-        String share=intent.getStringExtra(Intent.EXTRA_TEXT);
-        if(share==null || share.length()>16384)return;
+        CharSequence supplied=intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
+        String share=supplied==null?null:supplied.toString();
+        if(share==null || share.isEmpty() || share.length()>16384){
+            Toast.makeText(this,"Harita bağlantısını hedef formuna yapıştırabilirsiniz.",Toast.LENGTH_LONG).show();
+            editGoal(); return;
+        }
         String subject=intent.getStringExtra(Intent.EXTRA_SUBJECT);
+        readPlace(share,subject);
+    }
+    void readPlace(String share,String subject){
         int generation=++shareGeneration;
         Toast.makeText(this,"Paylaşılan konum okunuyor…",Toast.LENGTH_SHORT).show();
         new Thread(()->{
@@ -102,16 +109,28 @@ public class MainActivity extends Activity implements SensorEventListener, Locat
     void editGoal(double[] shared,String subject){
         if(goalDialog!=null && goalDialog.isShowing())goalDialog.dismiss();
         LinearLayout box=new LinearLayout(this); box.setOrientation(1); box.setPadding(dp(22),dp(6),dp(22),0);
-        TextView guide=line("Google Haritalar’da kayıtlı yeri veya arama sonucunu açın. Haritada başka bir nokta için basılı tutun. Yer kartından Paylaş → Pusula’yı seçin veya koordinatları aşağıya girin.",14,0xffcccccc);
+        TextView guide=line("Google Haritalar’da kayıtlı yeri veya arama sonucunu açın. Haritada başka bir nokta için basılı tutun. Dönmek için yer kartında Paylaş → Pusula’ya dokunun. Pusula görünmüyorsa bağlantıyı kopyalayın, buraya dönüp yapıştırın.",14,0xffcccccc);
         guide.setGravity(Gravity.START); box.addView(guide);
         Button maps=new Button(this);maps.setText("Google Haritalar’dan seç");box.addView(maps);
         maps.setOnClickListener(v->{
             String center=current==null?"0,0":current.getLatitude()+","+current.getLongitude();
             Intent view=new Intent(Intent.ACTION_VIEW,Uri.parse("geo:"+center)).setPackage("com.google.android.apps.maps");
+            view.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             try{startActivity(view);}catch(android.content.ActivityNotFoundException e){
                 try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://www.google.com/maps/")));}
                 catch(android.content.ActivityNotFoundException ignored){Toast.makeText(this,"Harita uygulaması bulunamadı.",Toast.LENGTH_SHORT).show();}
             }
+        });
+        Button paste=new Button(this);paste.setText("Harita bağlantısını yapıştır");box.addView(paste);
+        paste.setOnClickListener(v->{
+            android.content.ClipboardManager clipboard=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+            android.content.ClipData clip=clipboard.getPrimaryClip();
+            CharSequence value=clip==null || clip.getItemCount()==0?null:clip.getItemAt(0).getText();
+            if(value==null || value.length()==0 || value.length()>16384){
+                Toast.makeText(this,"Önce Haritalar’dan yer bağlantısını kopyalayın.",Toast.LENGTH_LONG).show();
+                return;
+            }
+            readPlace(value.toString(),null);
         });
         EditText name=input(box,"Hedef adı",false), lat=input(box,"Enlem (−90 … 90)",true), lon=input(box,"Boylam (−180 … 180)",true);
         if(shared!=null){
