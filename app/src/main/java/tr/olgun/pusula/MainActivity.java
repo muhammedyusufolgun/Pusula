@@ -82,7 +82,7 @@ public class MainActivity extends Activity implements SensorEventListener, Locat
         CharSequence supplied=intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
         String share=supplied==null?null:supplied.toString();
         if(share==null || share.isEmpty() || share.length()>16384){
-            Toast.makeText(this,"Harita bağlantısını hedef formuna yapıştırabilirsiniz.",Toast.LENGTH_LONG).show();
+            Toast.makeText(this,"Yer bağlantısı alınamadı. Haritalar’daki yer kartından tekrar paylaşın.",Toast.LENGTH_LONG).show();
             editGoal(); return;
         }
         String subject=intent.getStringExtra(Intent.EXTRA_SUBJECT);
@@ -101,15 +101,18 @@ public class MainActivity extends Activity implements SensorEventListener, Locat
                     new AlertDialog.Builder(this).setTitle("Koordinatlar okunamadı")
                         .setMessage("Google Haritalar’da yerin üzerine basılı tutarak bir iğne bırakın ve iğneyi Pusula ile paylaşın. Kısa bağlantılar için internet gerekir.")
                         .setPositiveButton("Tamam",null).show();
-                }else editGoal(point,subject);
+                }else {
+                    if(goalDialog!=null)goalDialog.dismiss();
+                    saveGoal(point[0],point[1],subject);
+                    Toast.makeText(this,"Haritalar’dan gelen hedef etkinleştirildi.",Toast.LENGTH_SHORT).show();
+                }
             });
         }).start();
     }
-    void editGoal(){editGoal(null,null);}
-    void editGoal(double[] shared,String subject){
+    void editGoal(){
         if(goalDialog!=null && goalDialog.isShowing())goalDialog.dismiss();
         LinearLayout box=new LinearLayout(this); box.setOrientation(1); box.setPadding(dp(22),dp(6),dp(22),0);
-        TextView guide=line("Google Haritalar’da kayıtlı yeri veya arama sonucunu açın. Haritada başka bir nokta için basılı tutun. Dönmek için yer kartında Paylaş → Pusula’ya dokunun. Pusula görünmüyorsa bağlantıyı kopyalayın, buraya dönüp yapıştırın.",14,0xffcccccc);
+        TextView guide=line("Google Haritalar’da kayıtlı yeri veya arama sonucunu açın. Haritada başka bir nokta için basılı tutun. Dönmek için yer kartında Paylaş → Pusula’ya dokunun. Hedef otomatik kaydedilir.",14,0xffcccccc);
         guide.setGravity(Gravity.START); box.addView(guide);
         Button maps=new Button(this);maps.setText("Google Haritalar’dan seç");box.addView(maps);
         maps.setOnClickListener(v->{
@@ -121,21 +124,8 @@ public class MainActivity extends Activity implements SensorEventListener, Locat
                 catch(android.content.ActivityNotFoundException ignored){Toast.makeText(this,"Harita uygulaması bulunamadı.",Toast.LENGTH_SHORT).show();}
             }
         });
-        Button paste=new Button(this);paste.setText("Harita bağlantısını yapıştır");box.addView(paste);
-        paste.setOnClickListener(v->{
-            android.content.ClipboardManager clipboard=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
-            android.content.ClipData clip=clipboard.getPrimaryClip();
-            CharSequence value=clip==null || clip.getItemCount()==0?null:clip.getItemAt(0).getText();
-            if(value==null || value.length()==0 || value.length()>16384){
-                Toast.makeText(this,"Önce Haritalar’dan yer bağlantısını kopyalayın.",Toast.LENGTH_LONG).show();
-                return;
-            }
-            readPlace(value.toString(),null);
-        });
         EditText name=input(box,"Hedef adı",false), lat=input(box,"Enlem (−90 … 90)",true), lon=input(box,"Boylam (−180 … 180)",true);
-        if(shared!=null){
-            name.setText(subject==null?"":subject);lat.setText(Double.toString(shared[0]));lon.setText(Double.toString(shared[1]));
-        }else if(goal!=null){name.setText(getPreferences(0).getString("name","Hedef"));
+        if(goal!=null){name.setText(getPreferences(0).getString("name","Hedef"));
             lat.setText(""+goal.getLatitude()); lon.setText(""+goal.getLongitude());}
         ScrollView scroll=new ScrollView(this); scroll.addView(box);
         AlertDialog d=new AlertDialog.Builder(this).setTitle("Hedef belirle").setView(scroll).setNegativeButton("Vazgeç",null)
@@ -145,11 +135,18 @@ public class MainActivity extends Activity implements SensorEventListener, Locat
             double la=number(lat),lo=number(lon);
             if(!(Math.abs(la)<=90)){lat.setError("Geçerli bir enlem girin");return;}
             if(!(Math.abs(lo)<=180)){lon.setError("Geçerli bir boylam girin");return;}
-            goal=new Location("hedef");goal.setLatitude(la);goal.setLongitude(lo);
-            String n=name.getText().toString().trim();
-            getPreferences(0).edit().putString("name",n.isEmpty()?"Hedef":n)
-                .putString("lat",""+la).putString("lon",""+lo).apply();updateInfo();d.dismiss();
+            saveGoal(la,lo,name.getText().toString());
+            d.dismiss();
         });
+    }
+    void saveGoal(double latitude,double longitude,String name){
+        goal=new Location("hedef");
+        goal.setLatitude(latitude); goal.setLongitude(longitude);
+        String label=name==null?"":name.trim();
+        getPreferences(0).edit().putString("name",label.isEmpty()?"Hedef":label)
+            .putString("lat",Double.toString(latitude))
+            .putString("lon",Double.toString(longitude)).apply();
+        updateInfo();
     }
     EditText input(LinearLayout box,String hint,boolean numeric){
         EditText e=new EditText(this);e.setHint(hint);e.setSingleLine();
