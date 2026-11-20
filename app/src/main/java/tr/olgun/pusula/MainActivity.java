@@ -49,19 +49,25 @@ public class MainActivity extends Activity implements SensorEventListener, Locat
         TextView title=line("Pusula",22,-1); title.setTypeface(null,Typeface.BOLD); root.addView(title);
         status=line("",13,0xffaeb7c4); root.addView(status);
         dial=new Dial(this); root.addView(dial,new LinearLayout.LayoutParams(-1,0,1));
-        coords=line("Konumu göster",15,0xffedf2fa); chip(coords,0xff18202b); root.addView(coords);
-        coords.setOnClickListener(v->{ if(!permitted()) requestPermissions(new String[]{FINE,COARSE},1);
-            else if(!hasProvider()) startActivity(new android.content.Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS));
-            else listenLocation(); });
+        coords=line("",15,0xffedf2fa);
+        root.addView(coords);
         destination=line("Hedef belirle",15,0xffb7f6cd); chip(destination,0xff103c26);
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,-2); lp.topMargin=dp(5);
         root.addView(destination,lp); destination.setOnClickListener(v->editGoal());
+        TextView signature=line("Muhammed Yusuf OLGUN",14,0xffcccccc);
+        LinearLayout.LayoutParams footer=new LinearLayout.LayoutParams(-1,-2);
+        footer.topMargin=signature.getLineHeight();
+        root.addView(signature,footer);
         if(getPreferences(0).contains("lat")){
             goal=new Location("hedef");
             goal.setLatitude(Double.parseDouble(getPreferences(0).getString("lat","0")));
             goal.setLongitude(Double.parseDouble(getPreferences(0).getString("lon","0")));
         }
         setContentView(root); updateInfo();
+        if(!getPreferences(0).getBoolean("locationPromptHandled",false)){
+            getPreferences(0).edit().putBoolean("locationPromptHandled",true).apply();
+            if(!permitted()) requestPermissions(new String[]{FINE,COARSE},1);
+        }
     }
     void editGoal(){
         LinearLayout box=new LinearLayout(this); box.setOrientation(1); box.setPadding(dp(22),dp(6),dp(22),0);
@@ -69,7 +75,7 @@ public class MainActivity extends Activity implements SensorEventListener, Locat
         if(goal!=null){name.setText(getPreferences(0).getString("name","Hedef"));
             lat.setText(""+goal.getLatitude()); lon.setText(""+goal.getLongitude());}
         AlertDialog d=new AlertDialog.Builder(this).setTitle("Hedef belirle").setView(box).setNegativeButton("Vazgeç",null)
-            .setNeutralButton("Hedefi kaldır",(a,b)->{goal=null;getPreferences(0).edit().clear().apply();updateInfo();})
+            .setNeutralButton("Hedefi kaldır",(a,b)->{goal=null;getPreferences(0).edit().remove("lat").remove("lon").remove("name").apply();updateInfo();})
             .setPositiveButton("Kaydet",null).create(); d.show();
         d.getButton(-1).setOnClickListener(v->{
             double la=number(lat),lo=number(lon);
@@ -120,7 +126,7 @@ public class MainActivity extends Activity implements SensorEventListener, Locat
     void updateInfo(){
         correction=declination();
         status.setText(!ready?"Pusula sensörü kullanılamıyor":inaccurate?"Kalibrasyon için telefonu 8 çizerek hareket ettirin":current==null?"Manyetik kuzey":"Gerçek kuzey");
-        if(current==null)coords.setText(!permitted()?"Konumu göster":hasProvider()?"Konum bekleniyor…":"Konumu aç");
+        if(current==null)coords.setText(!permitted()?"Konum izni kapalı":hasProvider()?"Konum bekleniyor…":"Konum kapalı");
         else coords.setText(String.format(tr,"%.5f° %s   %.5f° %s",Math.abs(current.getLatitude()),current.getLatitude()<0?"G":"K",Math.abs(current.getLongitude()),current.getLongitude()<0?"B":"D")+
             (current.hasAltitude()?String.format(tr,"   %.0f m",current.getAltitude()):""));
         String n=getPreferences(0).getString("name","Hedef");
