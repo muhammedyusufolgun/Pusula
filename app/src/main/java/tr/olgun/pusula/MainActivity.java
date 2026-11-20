@@ -1,6 +1,8 @@
 package tr.olgun.pusula;
 
 import android.app.*;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.content.pm.PackageManager;
 import android.content.Context;
@@ -64,21 +66,62 @@ public class MainActivity extends Activity implements SensorEventListener, Locat
             goal.setLongitude(Double.parseDouble(getPreferences(0).getString("lon","0")));
         }
         setContentView(root); updateInfo();
+        receiveMap(getIntent());
         if(!getPreferences(0).getBoolean("locationPromptHandled",false)){
             getPreferences(0).edit().putBoolean("locationPromptHandled",true).apply();
             if(!permitted()) requestPermissions(new String[]{FINE,COARSE},1);
         }
     }
-    void editGoal(){
+    AlertDialog goalDialog;
+    int shareGeneration;
+    @Override protected void onNewIntent(Intent intent){
+        super.onNewIntent(intent);setIntent(intent);receiveMap(intent);
+    }
+    void receiveMap(Intent intent){
+        if(!Intent.ACTION_SEND.equals(intent.getAction()))return;
+        String share=intent.getStringExtra(Intent.EXTRA_TEXT);
+        if(share==null || share.length()>16384)return;
+        String subject=intent.getStringExtra(Intent.EXTRA_SUBJECT);
+        int generation=++shareGeneration;
+        Toast.makeText(this,"Paylaşılan konum okunuyor…",Toast.LENGTH_SHORT).show();
+        new Thread(()->{
+            double[] result;
+            try{result=MapShare.resolve(share);}catch(Exception e){result=null;}
+            final double[] point=result;
+            runOnUiThread(()->{
+                if(isDestroyed() || isFinishing() || generation!=shareGeneration)return;
+                if(point==null){
+                    new AlertDialog.Builder(this).setTitle("Koordinatlar okunamadı")
+                        .setMessage("Google Haritalar’da yerin üzerine basılı tutarak bir iğne bırakın ve iğneyi Pusula ile paylaşın. Kısa bağlantılar için internet gerekir.")
+                        .setPositiveButton("Tamam",null).show();
+                }else editGoal(point,subject);
+            });
+        }).start();
+    }
+    void editGoal(){editGoal(null,null);}
+    void editGoal(double[] shared,String subject){
+        if(goalDialog!=null && goalDialog.isShowing())goalDialog.dismiss();
         LinearLayout box=new LinearLayout(this); box.setOrientation(1); box.setPadding(dp(22),dp(6),dp(22),0);
-        TextView guide=line("Gideceğiniz yerin koordinatlarını girin. Örnek: enlem 39.9208, boylam 32.8541. Yeşil nokta hedefin yönünü gösterir.",14,0xffcccccc);
+        TextView guide=line("Google Haritalar’da kayıtlı yeri veya arama sonucunu açın. Haritada başka bir nokta için basılı tutun. Yer kartından Paylaş → Pusula’yı seçin veya koordinatları aşağıya girin.",14,0xffcccccc);
         guide.setGravity(Gravity.START); box.addView(guide);
+        Button maps=new Button(this);maps.setText("Google Haritalar’dan seç");box.addView(maps);
+        maps.setOnClickListener(v->{
+            String center=current==null?"0,0":current.getLatitude()+","+current.getLongitude();
+            Intent view=new Intent(Intent.ACTION_VIEW,Uri.parse("geo:"+center)).setPackage("com.google.android.apps.maps");
+            try{startActivity(view);}catch(android.content.ActivityNotFoundException e){
+                try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://www.google.com/maps/")));}
+                catch(android.content.ActivityNotFoundException ignored){Toast.makeText(this,"Harita uygulaması bulunamadı.",Toast.LENGTH_SHORT).show();}
+            }
+        });
         EditText name=input(box,"Hedef adı",false), lat=input(box,"Enlem (−90 … 90)",true), lon=input(box,"Boylam (−180 … 180)",true);
-        if(goal!=null){name.setText(getPreferences(0).getString("name","Hedef"));
+        if(shared!=null){
+            name.setText(subject==null?"":subject);lat.setText(Double.toString(shared[0]));lon.setText(Double.toString(shared[1]));
+        }else if(goal!=null){name.setText(getPreferences(0).getString("name","Hedef"));
             lat.setText(""+goal.getLatitude()); lon.setText(""+goal.getLongitude());}
-        AlertDialog d=new AlertDialog.Builder(this).setTitle("Hedef belirle").setView(box).setNegativeButton("Vazgeç",null)
+        ScrollView scroll=new ScrollView(this); scroll.addView(box);
+        AlertDialog d=new AlertDialog.Builder(this).setTitle("Hedef belirle").setView(scroll).setNegativeButton("Vazgeç",null)
             .setNeutralButton("Hedefi kaldır",(a,b)->{goal=null;getPreferences(0).edit().remove("lat").remove("lon").remove("name").apply();updateInfo();})
-            .setPositiveButton("Kaydet",null).create(); d.show();
+            .setPositiveButton("Kaydet",null).create(); goalDialog=d; d.show();
         d.getButton(-1).setOnClickListener(v->{
             double la=number(lat),lo=number(lon);
             if(!(Math.abs(la)<=90)){lat.setError("Geçerli bir enlem girin");return;}
