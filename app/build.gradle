@@ -1,0 +1,12 @@
+plugins { id 'com.android.application' version '8.7.3' }
+android {
+    namespace 'tr.olgun.pusula'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'tr.olgun.pusula'
+        minSdk 23
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+    }
+}
